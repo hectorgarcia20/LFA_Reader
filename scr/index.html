@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -43,7 +42,6 @@
             max-width: 600px;
         }
 
-        /* DETECTED COLOR BOX */
         .detected-color-container {
             background-color: #FFF;
             box-shadow: 0 4px 10px var(--shadow);
@@ -74,7 +72,6 @@
             font-weight: bold;
         }
 
-        /* DATA BOXES */
         .data-boxes {
             display: flex;
             justify-content: center;
@@ -109,7 +106,6 @@
             color: #333;
         }
 
-        /* COLORS */
         .red { background-color: var(--red); }
         .blue { background-color: var(--blue); }
         .green { background-color: var(--green); }
@@ -120,7 +116,6 @@
             margin-top: 10px;
             border-radius: 5px;
         }
-
 
         button {
             background-color: var(--blue);
@@ -152,7 +147,7 @@
         .red-line { background-color: var(--red); }
         .blue-line { background-color: var(--blue); }
         .green-line { background-color: var(--green); }
-        /* Responsive Design */
+
         @media (max-width: 768px) {
             * { margin: 0 10px; }
             .title { font-size: 28px; padding: 10px 20px; }
@@ -168,15 +163,10 @@
         }
     </style>
 </head>
-<button onclick="connectBluetooth()"> Bluetooth</button>
-</div>
-
-<!-- Firebase Scripts -->
-<script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
 <body>
     <div class="main-container">
         <div class="title">LFA Reader</div>
+        <button onclick="connectBluetooth()">Bluetooth</button>
         <div class="detected-color-container">
             <div style="font-weight: bold; font-size: 20px;">DETECTED COLOR</div>
             <div id="detected-color" style="font-size: 22px;">"INDEFINIDO"</div>
@@ -201,22 +191,21 @@
                 <p>BLUE</p>
                 <p id="Blue">0</p>
                 <hr class="blue-line">
-                
             </div>
         </div>
     </div>
 
-        <!-- Botón para activar/desactivar Bluetooth -->
-    
-    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
+
     <script>
-        // Configuración de Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyDb0MNZx7DZM_u9fz9VYad5EptkVdnK2YQ",
             authDomain: "lfar-cb399.firebaseapp.com",
             databaseURL: "https://lfar-cb399-default-rtdb.firebaseio.com",
             projectId: "lfar-cb399",
-            storageBucket: "lfar-cb399.firebasestorage.app",
+            storageBucket: "lfar-cb399.appspot.com",
             messagingSenderId: "140652099318",
             appId: "1:140652099318:web:c1f4342562b05398e51ed7",
             measurementId: "G-77T2SHFNPG"
@@ -235,34 +224,62 @@
             });
         }
 
-        
+        updateValue("Rojo", "Red");
+        updateValue("Azul", "Blue");
+        updateValue("Verde", "Green");
+        updateValue("Color_detectado", "detected-color", "\"");
+        updateValue("Lux", "lux", "LUX: ");
+        updateValue("Intensidad", "intensity-container", "INTENSIDAD: ");
 
-        function toggleBluetooth() {
-            useBluetooth = !useBluetooth;
-            console.log("Bluetooth " + (useBluetooth ? "Activado" : "Desactivado"));
+        // BLE UUIDs
+        const serviceUuid = "12345678-1234-1234-1234-1234567890ab";
+        const characteristicUuid = "abcd1234-5678-90ab-cdef-1234567890ab";
 
-            if (!useBluetooth) {
-                updateValue("Rojo", "Red");
-                updateValue("Azul", "Blue");
-                updateValue("Verde", "Green");
-                updateValue("Color_detectado", "detected-color", "\"");
-                updateValue("Lux", "lux", "LUX: ");
-                updateValue("Intensidad", "intensity-container", "INTENSIDAD: ");
+        async function connectBluetooth() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: "LFA Sensor" }],
+                    optionalServices: [serviceUuid]
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(serviceUuid);
+                const characteristic = await service.getCharacteristic(characteristicUuid);
+
+                await characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
+
+                console.log("✅ Conectado a", device.name);
+                useBluetooth = true;
+
+                // Detener Firebase si se usa Bluetooth
+                firebase.database().ref("LFAR").off();
+
+            } catch (error) {
+                console.error("❌ Error al conectar vía Bluetooth:", error);
             }
         }
-        
 
+        function handleCharacteristicValueChanged(event) {
+            const value = new TextDecoder().decode(event.target.value);
+            const data = {};
+            value.split(',').forEach(pair => {
+                const [key, val] = pair.split(':');
+                data[key.trim()] = val.trim();
+            });
 
-        // Actualizar Detected Color, Intensidad y Lux
-        const detectedColorRef = database.ref("LFAR/Color_detectado");
-        detectedColorRef.on('value', function(snapshot) {
-            const color = snapshot.val();
-            const detectedColorText = document.getElementById('detected-color');
-            const detectedColorContainer = document.querySelector('.detected-color-container');
+            document.getElementById("Red").innerText = data["R"];
+            document.getElementById("Green").innerText = data["G"];
+            document.getElementById("Blue").innerText = data["B"];
+            document.getElementById("lux").innerText = "LUX: " + data["Lux"];
+            document.getElementById("intensity-container").innerText = "INTENSIDAD: " + data["Lux"];
+            const color = data["Color"];
+            document.getElementById("detected-color").innerText = `"${color.toUpperCase()}"`;
+
             const intensityContainer = document.getElementById('intensity-container');
             const luxElement = document.getElementById('lux');
-
-            detectedColorText.innerHTML = `"${color.toUpperCase()}"`;
+            const detectedColorText = document.getElementById('detected-color');
+            const detectedColorContainer = document.querySelector('.detected-color-container');
 
             if (color === 'Rojo') {
                 intensityContainer.style.backgroundColor = 'var(--red)';
@@ -285,33 +302,7 @@
                 detectedColorText.style.color = '#555';
                 detectedColorContainer.style.color = '#555';
             }
-        });
-
-        updateValue("Lux", "lux", "LUX: ");
-        updateValue("Intensidad", "intensity-container", "INTENSIDAD: ");
-
-        async function connectBluetooth() {
-    try {
-        const device = await navigator.bluetooth.requestDevice({
-            acceptAllDevices: true,
-            optionalServices: ['battery_service']
-        });
-        console.log("Dispositivo seleccionado:", device.name);
-        
-        // Intentar conectar al dispositivo
-        const server = await device.gatt.connect();
-        console.log("Conectado a:", device.name);
-        
-        // Aquí puedes agregar la lógica de adquisición de datos
-        alert("Conectado a " + device.name);
-        
-        // Activar Bluetooth en la app
-        useBluetooth = true;
-    } catch (error) {
-        console.log("Error al conectar Bluetooth:", error);
-    }
-}
-
+        }
     </script>
 </body>
 </html>
