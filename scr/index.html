@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -168,6 +168,7 @@
         <div class="title">LFA Reader</div>
         <button onclick="connectBluetooth()">Bluetooth</button>
         <button onclick="downloadLog()">Descargar Bloc de Notas</button>
+        <button onclick="downloadFirebaseLog()">Descargar Global (Firebase)</button>
 
         <div class="detected-color-container">
             <div style="font-weight: bold; font-size: 20px;">DETECTED COLOR</div>
@@ -270,7 +271,18 @@
 
             const color = data["Color"];
             const timestamp = new Date().toLocaleString();
-            logData.push(`[${timestamp}] R:${data["R"]}, G:${data["G"]}, B:${data["B"]}, Lux:${data["Lux"]}, Color:${color}`);
+            const logLine = `[${timestamp}] R:${data["R"]}, G:${data["G"]}, B:${data["B"]}, Lux:${data["Lux"]}, Color:${color}`;
+            logData.push(logLine);
+
+            // ✅ Guardar en Firebase global
+            firebase.database().ref("Lecturas").push({
+                timestamp: timestamp,
+                R: data["R"],
+                G: data["G"],
+                B: data["B"],
+                Lux: data["Lux"],
+                Color: color
+            });
 
             document.getElementById("Red").innerText = data["R"];
             document.getElementById("Green").innerText = data["G"];
@@ -323,6 +335,32 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        }
+
+        function downloadFirebaseLog() {
+            const ref = firebase.database().ref("Lecturas");
+            ref.once('value', function(snapshot) {
+                const entries = snapshot.val();
+                if (!entries) {
+                    alert("No hay datos guardados en la nube.");
+                    return;
+                }
+
+                const lines = Object.values(entries).map(entry => {
+                    return `[${entry.timestamp}] R:${entry.R}, G:${entry.G}, B:${entry.B}, Lux:${entry.Lux}, Color:${entry.Color}`;
+                });
+
+                const blob = new Blob([lines.join("\n")], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "lecturas_globales.txt";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
         }
     </script>
 </body>
